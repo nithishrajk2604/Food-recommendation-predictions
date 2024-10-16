@@ -1,0 +1,119 @@
+# Importing necessary libraries
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import accuracy_score, classification_report
+from IPython.display import display
+import ipywidgets as widgets
+import random
+
+# Loading the dataset
+file_path = '/mnt/data/1662574418893344.csv'  # Path to the uploaded file
+df = pd.read_csv('/content/1662574418893344.csv')
+
+# Display the first few rows of the dataset to understand its structure
+print("Dataset Head:")
+print(df.head())
+
+# Defining the mood-food mapping. You can add more moods and food types here.
+mood_to_type = {
+    'Happy': 'Healthy Food',
+    'Sad': 'Dessert',
+    'Energetic': 'Snack',
+    'Relaxed': 'Dessert'
+}
+
+# Adding a new 'Mood' column based on the 'C_Type' values
+def assign_mood(c_type):
+    for mood, food_type in mood_to_type.items():
+        if food_type in c_type:
+            return mood
+    return 'Neutral'
+
+# Apply the mood assignment to the dataset
+df['Mood'] = df['C_Type'].apply(assign_mood)
+
+# Encoding Categorical Variables
+le_mood = LabelEncoder()
+le_food = LabelEncoder()
+
+df['Mood_encoded'] = le_mood.fit_transform(df['Mood'])
+df['Food_encoded'] = le_food.fit_transform(df['Name'])  # Using 'Name' as food for recommendation
+
+# Features and target
+X = df['Mood_encoded'].values.reshape(-1, 1)
+y = df['Food_encoded']
+
+# Splitting the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+# Print the training and testing set sizes
+print("\nTraining set size:", X_train.shape)
+print("Testing set size:", X_test.shape)
+
+# Model Building: Using K-Nearest Neighbors (KNN)
+knn = KNeighborsClassifier(n_neighbors=3)
+knn.fit(X_train, y_train)
+y_pred = knn.predict(X_test)
+
+# Model Evaluation
+accuracy = accuracy_score(y_test, y_pred)
+print(f"\nAccuracy: {accuracy * 100:.2f}%\n")
+
+# Extract the unique labels in the test set
+unique_labels = sorted(set(y_test))
+
+# Get the corresponding food names for the unique labels
+target_names = le_food.inverse_transform(unique_labels)
+
+# Print the classification report with the correct target names
+print("Classification Report:")
+print(classification_report(y_test, y_pred, labels=unique_labels, target_names=target_names))
+
+# Recommendation Function with random selection
+def recommend_food(user_mood):
+    try:
+        # Encode the user's mood
+        mood_encoded = le_mood.transform([user_mood])[0]
+
+        # Get all the food options for the given mood
+        food_indices = df[df['Mood_encoded'] == mood_encoded]['Food_encoded'].values
+
+        # If there are no matching foods, return a message
+        if len(food_indices) == 0:
+            return "No food recommendations available for this mood."
+
+        # Randomly select a food from the available options
+        random_food_encoded = random.choice(food_indices)
+        food = le_food.inverse_transform([random_food_encoded])[0]
+        return food
+    except ValueError:
+        return "Mood not recognized. Please try another mood."
+
+# Interactive Widgets for User Input
+mood_dropdown = widgets.Dropdown(
+    options=le_mood.classes_,  # Dropdown options are the encoded mood classes
+    description='Select Mood:',
+    disabled=False,
+)
+
+button = widgets.Button(description="Get Recommendation")
+output = widgets.Output()
+
+# Function to handle the button click event
+def on_button_clicked(b):
+    with output:
+        output.clear_output()
+        selected_mood = mood_dropdown.value
+        recommendation = recommend_food(selected_mood)
+        print(f"Recommended food for a {selected_mood} mood: {recommendation}")
+
+button.on_click(on_button_clicked)
+
+# Displaying the dropdown, button, and output area
+ui = widgets.VBox([mood_dropdown, button, output])
+display(ui)
